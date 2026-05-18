@@ -1,0 +1,29 @@
+{
+  "ngoc_huyen_-_review_phim": {
+    "voice_id": "ngoc_huyen_-_review_phim",
+    "name": "Ngọc Huyền - Review Phim",
+    "audio_path": "myAudio/ngoc_huyen_-_review_phim.wav",
+    "ref_text": "xin chào các bạn, đây là giọng ngọc huyền chuyên tóm tắt phim.",
+    "enhanced": true,
+    "created_at": "2026-05-18T09:56:18",
+    "updated_at": "2026-05-18T09:56:18"
+  },
+  "nam_-_tram_am": {
+    "voice_id": "nam_-_tram_am",
+    "name": "Nam - Trầm Ấm",
+    "audio_path": "myAudio/nam_-_tram_am.wav",
+    "ref_text": "bởi vì hiện tại tôi gần như không sống nổi như thế này.",
+    "enhanced": true,
+    "created_at": "2026-05-18T09:54:33",
+    "updated_at": "2026-05-18T09:54:33"
+  },
+  "nam_-_khoa_hoc": {
+    "voice_id": "nam_-_khoa_hoc",
+    "name": "Nam - Khoa học",
+    "audio_path": "myAudio/nam_-_khoa_hoc.wav",
+    "ref_text": "đây là giọng nói chuyên dùng để làm nội dung về khoa học.",
+    "enhanced": true,
+    "created_at": "2026-05-18T10:05:18",
+    "updated_at": "2026-05-18T10:05:18"
+  }
+}
