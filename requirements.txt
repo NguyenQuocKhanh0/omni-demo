@@ -1,0 +1,21 @@
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+omnivoice
+
+torch==2.8.0
+torchvision==0.23.0
+torchaudio==2.8.0
+
+transformers==5.3.0
+accelerate
+pydub
+gradio
+tensorboardX
+webdataset
+numpy
+soundfile
+
+chunkformer
+clearvoice
+dotenv
+minio
