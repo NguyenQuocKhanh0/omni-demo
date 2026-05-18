@@ -977,7 +977,7 @@ def normalize_vietnamese_tts(text):
     text = re.sub(r'(?<=\d)h(?=\d)', ' giờ ', text)
     text = re.sub(r'(?<=\d)\s*h\b', ' giờ', text)
     text = normalize_currency(text)
-    text = normalize_number_punctuation(text)   
+    
     # text = normalize_case(text)
     text = text.replace("₂", "2").replace("₃", "3").replace("₄", "4")
     text = text.replace("+"," cộng ")
@@ -1017,6 +1017,8 @@ def normalize_vietnamese_tts(text):
     return text
 
 def easy_normalize(text):
+    text = text.replace("~", " ").replace("%", " phần trăm ").replace("v.v","vân vân ")
+    text = normalize_number_punctuation(text)
     text = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', text)
 
     # Tách giữa chữ và số
