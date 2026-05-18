@@ -260,6 +260,7 @@ def text_to_speech(
 ):
     sr = 24000
     start_time = time.perf_counter()
+    texts = texts.replace("AI","ây ai")
 
     chunks = list(split_text_into_chunks(texts))
     silence = np.zeros(int(sr * silence_ms / 1000.0), dtype=np.float32)
