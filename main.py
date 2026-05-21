@@ -364,10 +364,11 @@ def build_demo():
             with gr.Row():
                 with gr.Column():
                     ref_audio = gr.Audio(label="🔊 Reference Voice (1s-9s)", type="filepath")
-                    use_enhance_ref_audio = gr.Checkbox(
-                        value=True,
-                        label="Khử nhiễu âm thanh đầu vào",
-                    )
+                    # use_enhance_ref_audio = gr.Checkbox(
+                    #     value=True,
+                    #     label="Khử nhiễu âm thanh đầu vào",
+                    # )
+                    use_enhance_ref_audio=True
                     ref_text = gr.Textbox(label="📝 Reference Text (optional)", lines=3)
 
                     # Chỉ clear Reference Text khi người dùng upload/clear thủ công.

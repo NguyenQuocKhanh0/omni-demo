@@ -349,7 +349,7 @@ def read_number_auto(num_str, force_large=False):
         return read_three_digits(clean)
 
     if len(clean) == 4 and FOUR_DIGIT_AS_DIGIT_BY_DIGIT:
-        return read_digit_by_digit(clean)
+        return read_large_number(clean)
 
     return read_large_number(clean)
 
