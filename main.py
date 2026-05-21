@@ -191,7 +191,7 @@ def tts_worker():
                         ref_text = ref_text.strip()
                         # print(ref_text)
 
-                        prompt_wav_path = enhanced_ref_audio if use_enhance_ref_audio else ref_audio_path
+                        prompt_wav_path = enhanced_ref_audio #if use_enhance_ref_audio else ref_audio_path
 
                     fd, out_path = tempfile.mkstemp(suffix=".wav")
 
@@ -364,11 +364,10 @@ def build_demo():
             with gr.Row():
                 with gr.Column():
                     ref_audio = gr.Audio(label="🔊 Reference Voice (1s-9s)", type="filepath")
-                    # use_enhance_ref_audio = gr.Checkbox(
-                    #     value=True,
-                    #     label="Khử nhiễu âm thanh đầu vào",
-                    # )
-                    use_enhance_ref_audio=True
+                    use_enhance_ref_audio = gr.Checkbox(
+                        value=True,
+                        label="Khử nhiễu âm thanh đầu vào",
+                    )
                     ref_text = gr.Textbox(label="📝 Reference Text (optional)", lines=3)
 
                     # Chỉ clear Reference Text khi người dùng upload/clear thủ công.
