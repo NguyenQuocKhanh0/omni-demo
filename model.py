@@ -132,6 +132,65 @@ def trim_leading_silence_torch(
 
     return wav[:, start_idx:]
 
+
+def trim_edge_silence_np(
+    audio_np: np.ndarray,
+    sample_rate: int,
+    silence_thresh: float = 0.086,
+    chunk_ms: int = 10,
+    extend_ms: int = 20,
+    ratio: float = 0.95,
+):
+    """
+    Cắt khoảng lặng ở ĐẦU và CUỐI từng chunk audio.
+
+    extend_ms giúp giữ lại một ít âm thanh trước/sau đoạn có tiếng
+    để tránh cắt quá sát vào lời nói.
+    """
+    audio_np = np.asarray(audio_np, dtype=np.float32)
+
+    if audio_np.ndim > 1:
+        audio_np = audio_np.squeeze()
+
+    if audio_np.size == 0:
+        return audio_np.astype(np.float32)
+
+    max_amp = np.max(np.abs(audio_np))
+    if max_amp < 1e-8:
+        return audio_np.astype(np.float32)
+
+    norm = audio_np / (max_amp + 1e-8)
+
+    chunk_size = max(1, int(sample_rate * chunk_ms / 1000))
+    extend_size = max(0, int(sample_rate * extend_ms / 1000))
+
+    first_voice_idx = None
+    last_voice_idx = None
+
+    for start in range(0, len(norm), chunk_size):
+        end = min(start + chunk_size, len(norm))
+        block = norm[start:end]
+
+        if block.size == 0:
+            continue
+
+        silent_ratio = np.mean(np.abs(block) < silence_thresh)
+
+        # Nếu không đủ im lặng theo ratio thì xem là bắt đầu/còn lời nói
+        if silent_ratio < ratio:
+            if first_voice_idx is None:
+                first_voice_idx = start
+            last_voice_idx = end
+
+    # Không detect được lời nói thì giữ nguyên để tránh xóa nhầm cả chunk
+    if first_voice_idx is None or last_voice_idx is None:
+        return audio_np.astype(np.float32)
+
+    cut_start = max(0, first_voice_idx - extend_size)
+    cut_end = min(len(audio_np), last_voice_idx + extend_size)
+
+    return audio_np[cut_start:cut_end].astype(np.float32)
+
 import re
 import re
 from typing import List
@@ -257,6 +316,11 @@ def text_to_speech(
     position_temperature=5.0,
     class_temperature=0.0,
     num_threads=2,
+    trim_chunk_silence=True,
+    chunk_silence_thresh=0.086,
+    chunk_trim_ms=10,
+    chunk_extend_ms=20,
+    chunk_silence_ratio=0.95,
 ):
     sr = 24000
     start_time = time.perf_counter()
@@ -321,6 +385,16 @@ def text_to_speech(
                         audio = model.generate(**generate_kwargs)
 
         audio_np = audio_to_numpy(audio)
+
+        if trim_chunk_silence:
+            audio_np = trim_edge_silence_np(
+                audio_np,
+                sample_rate=sr,
+                silence_thresh=chunk_silence_thresh,
+                chunk_ms=chunk_trim_ms,
+                extend_ms=chunk_extend_ms,
+                ratio=chunk_silence_ratio,
+            )
 
         if str(device).startswith("cuda"):
             torch.cuda.synchronize(device)
@@ -405,144 +479,3 @@ def text_to_speech(
         "num_threads": max_workers,
         "devices": used_devices,
     }
-
-# def text_to_speech(
-#     texts,
-#     prompt_wav_path=None,
-#     prompt_text=None,
-#     inference_timesteps=32,
-#     out_path="col.wav",
-#     silence_ms=170,
-#     speed=1.0,
-#     language="vi",
-#     guidance_scale=2.0,
-#     t_shift=0.1,
-#     layer_penalty_factor=5.0,
-#     position_temperature=5.0,
-#     class_temperature=0.0,
-# ):
-#     sr = 24000
-
-#     silence = np.zeros(int(sr * silence_ms / 1000.0), dtype=np.float32)
-#     wavs = []
-
-#     # Nếu có prompt_wav_path thì dùng cố định từ đầu đến cuối
-#     fixed_ref_audio_path = prompt_wav_path
-#     fixed_ref_text = prompt_text
-
-#     # Nếu không có prompt_wav_path thì sẽ lấy chunk đầu tiên làm ref cố định
-#     first_chunk_ref_audio_path = None
-#     first_chunk_ref_text = None
-
-#     with tempfile.TemporaryDirectory() as tmp_dir:
-#         for i, chunk in enumerate(split_text_into_chunks(texts)):
-#             with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
-#                 chunk = easy_normalize(chunk)
-#                 if language == "auto":
-#                     chunk = normalize_vietnamese_tts(chunk)
-#                     text = g2p(chunk)
-#                 elif language == "en":
-#                     text = to_custom(chunk, "en")
-#                 elif language == "none":
-#                     text = chunk
-#                 else:
-#                     chunk = normalize_vietnamese_tts(chunk)
-#                     text = chunk
-
-#                 print(text)
-
-#                 if fixed_ref_audio_path is not None:
-#                     # Có prompt_wav_path: luôn dùng prompt gốc
-#                     audio = model.generate(
-#                         text=text,
-#                         ref_audio=fixed_ref_audio_path,
-#                         ref_text=fixed_ref_text,
-#                         num_step=inference_timesteps,
-#                         speed=speed,
-#                         guidance_scale=guidance_scale,
-#                         t_shift=t_shift,
-#                         layer_penalty_factor=layer_penalty_factor,
-#                         position_temperature=position_temperature,
-#                         class_temperature=class_temperature,
-#                     )
-
-#                 elif first_chunk_ref_audio_path is not None:
-#                     # Không có prompt_wav_path:
-#                     # Các chunk sau dùng chunk đầu tiên làm ref cố định
-#                     audio = model.generate(
-#                         text=text,
-#                         ref_audio=first_chunk_ref_audio_path,
-#                         ref_text=first_chunk_ref_text,
-#                         num_step=inference_timesteps,
-#                         speed=speed,
-#                         guidance_scale=guidance_scale,
-#                         t_shift=t_shift,
-#                         layer_penalty_factor=layer_penalty_factor,
-#                         position_temperature=position_temperature,
-#                         class_temperature=class_temperature,
-#                     )
-
-#                 else:
-#                     # Chunk đầu tiên khi không có prompt_wav_path: sinh random
-#                     audio = model.generate(
-#                         text=text,
-#                         num_step=inference_timesteps,
-#                         speed=speed,
-#                         guidance_scale=guidance_scale,
-#                         t_shift=t_shift,
-#                         layer_penalty_factor=layer_penalty_factor,
-#                         position_temperature=position_temperature,
-#                         class_temperature=class_temperature,
-#                     )
-
-#             # audio: (T,) hoặc (1, T)
-#             if isinstance(audio, list):
-#                 audio_t = torch.cat(audio, dim=-1)
-#             else:
-#                 audio_t = torch.as_tensor(audio)
-
-#             audio_t = audio_t.float()
-
-#             if audio_t.dim() == 1:
-#                 audio_t = audio_t.unsqueeze(0)
-
-#             # Trim silence đầu chỉ cho các chunk sau
-#             if i > 0:
-#                 audio_t = trim_leading_silence_torch(
-#                     audio_t,
-#                     sample_rate=sr,
-#                     silence_thresh=0.086,
-#                     chunk_ms=10,
-#                     extend_ms=20,
-#                     ratio=0.95,
-#                 )
-
-#             audio_np = audio_t.squeeze(0).cpu().numpy().astype(np.float32)
-
-#             if i > 0:
-#                 wavs.append(silence)
-
-#             wavs.append(audio_np)
-
-#             # Chỉ lưu chunk đầu tiên làm ref nếu ban đầu không có prompt_wav_path
-#             if fixed_ref_audio_path is None and i == 0:
-#                 first_chunk_ref_audio_path = os.path.join(tmp_dir, "first_chunk_ref.wav")
-#                 sf.write(first_chunk_ref_audio_path, audio_np, sr)
-#                 first_chunk_ref_text = text
-
-#         final = np.concatenate(wavs) if wavs else np.zeros(0, np.float32)
-
-#         final_t = torch.from_numpy(final).unsqueeze(0)
-
-#         final_t = trim_internal_silence_segment_torch(
-#             final_t,
-#             sample_rate=sr,
-#             silence_thresh=0.05,
-#             max_silence_ms=450,
-#         )
-
-#         final = final_t.squeeze(0).cpu().numpy()
-
-#         sf.write(out_path, final, sr)
-
-#     return out_path
