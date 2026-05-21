@@ -307,7 +307,7 @@ def text_to_speech(
     prompt_text=None,
     inference_timesteps=32,
     out_path="col.wav",
-    silence_ms=170,
+    silence_ms=220,
     speed=1.0,
     language="vi",
     guidance_scale=2.0,
