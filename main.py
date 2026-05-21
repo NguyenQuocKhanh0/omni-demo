@@ -159,7 +159,7 @@ def tts_worker():
                     layer_penalty_factor = payload["layer_penalty_factor"]
                     position_temperature = payload["position_temperature"]
                     class_temperature = payload["class_temperature"]
-                    use_enhance_ref_audio = payload["use_enhance_ref_audio"]
+                    use_enhance_ref_audio = True
 
                     if not gen_text.strip():
                         raise ValueError("Please enter text content to generate voice.")
@@ -191,7 +191,7 @@ def tts_worker():
                         ref_text = ref_text.strip()
                         # print(ref_text)
 
-                        prompt_wav_path = enhanced_ref_audio #if use_enhance_ref_audio else ref_audio_path
+                        prompt_wav_path = enhanced_ref_audio if use_enhance_ref_audio else ref_audio_path
 
                     fd, out_path = tempfile.mkstemp(suffix=".wav")
 
