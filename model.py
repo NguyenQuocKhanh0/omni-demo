@@ -319,7 +319,7 @@ def text_to_speech(
     trim_chunk_silence=True,
     chunk_silence_thresh=0.086,
     chunk_trim_ms=10,
-    chunk_extend_ms=20,
+    chunk_extend_ms=50,
     chunk_silence_ratio=0.95,
 ):
     sr = 24000
