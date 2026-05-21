@@ -197,7 +197,7 @@ def normalize_text_for_tts(chunk, language):
         text = g2p(chunk)
 
     elif language == "en":
-        chunk = easy_normalize(chunk)
+        # chunk = easy_normalize(chunk)
         text = to_custom(chunk, "en")
 
     elif language == "none":
@@ -260,8 +260,7 @@ def text_to_speech(
 ):
     sr = 24000
     start_time = time.perf_counter()
-    texts = texts.replace("AI","ây ai")
-
+    texts = texts.replace("AI","ây ai").replace("IT","ai ti")
     chunks = list(split_text_into_chunks(texts))
     silence = np.zeros(int(sr * silence_ms / 1000.0), dtype=np.float32)
 

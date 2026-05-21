@@ -1017,7 +1017,7 @@ def normalize_vietnamese_tts(text):
     return text
 
 def easy_normalize(text):
-    text = text.replace("~", " ").replace("%", " phần trăm ").replace("v.v","vân vân ")
+    text = text.replace("~", " ").replace("%", " phần trăm ").replace("v.v","vân vân ").replace("@"," a còng ").replace("#"," thăng ").replace("*"," sao ")
     text = normalize_number_punctuation(text)
     text = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', text)
 
@@ -1049,12 +1049,30 @@ from typing import List
 import re
 from typing import List, Dict, Any, Optional
 
+import re
+from typing import List, Optional
+
+import re
+from typing import List, Optional
+
+import re
+import math
+from typing import List, Optional
 
 # ===== SETTINGS =====
 MIN_CHARS = 80
 MAX_CHARS = 200
 FORCE_PERIOD = False
 MAX_PAUSES = 5
+
+# Cho phép thêm tối đa bao nhiêu chunk so với số chunk tối thiểu.
+# Tăng số này nếu muốn các đoạn đều hơn nữa, nhưng sẽ tạo nhiều chunk hơn.
+# Đặt = 0 nếu muốn số chunk ít nhất có thể.
+BALANCE_EXTRA_CHUNKS = 2
+
+SENTENCE_END_PUNCT = ".!?…"
+SOFT_SPLIT_PUNCT = ",;:"
+CLOSING_CHARS = "”’\"')]}»"
 
 
 def split_text_into_chunks(
@@ -1063,23 +1081,18 @@ def split_text_into_chunks(
     max_chars: int = MAX_CHARS,
     force_period: bool = FORCE_PERIOD,
     max_pauses: int = MAX_PAUSES,
+    balance_extra_chunks: int = BALANCE_EXTRA_CHUNKS,
 ) -> List[str]:
     """
     Tách text thành các chunk phục vụ TTS.
 
-    Ưu tiên cao nhất:
-        1. Mỗi chunk nên nằm trong [min_chars, max_chars].
-        2. Chỉ cho phép chunk < min_chars khi:
-            - toàn bộ text < min_chars, hoặc
-            - không có cách cắt/gộp hợp lệ để vừa giữ max_chars vừa kết thúc bằng dấu chấm.
-        3. Không để chunk > max_chars, trừ trường hợp bất khả kháng như một từ đơn dài hơn max_chars.
-
-    Ưu tiên tiếp theo:
-        - Ưu tiên kết thúc chunk bằng dấu '.'.
-        - Nếu không tìm được dấu '.' hợp lệ trong khoảng [min_chars, max_chars],
-          mới fallback sang ',' hoặc khoảng trắng.
-        - Không tách tại '.' hoặc ',' nếu dấu đó nằm giữa 2 chữ số, ví dụ 3.14, 1,000.
-        - max_pauses là ràng buộc phụ: ưu tiên giữ <= max_pauses nếu không làm vỡ min/max.
+    Ưu tiên:
+        1. Không cắt giữa câu nếu chưa bắt buộc.
+        2. Chỉ cắt trong câu khi câu/đoạn đó dài hơn max_chars.
+        3. Sau khi có các câu/piece hợp lệ, chọn cách gom sao cho độ dài chunk đồng đều nhất.
+        4. max_chars là ràng buộc cứng.
+        5. min_chars và max_pauses là ràng buộc mềm.
+        6. Không tạo dấu chấm đầu câu, không tạo '..'.
     """
     if min_chars < 1:
         raise ValueError("min_chars phải >= 1.")
@@ -1087,18 +1100,45 @@ def split_text_into_chunks(
         raise ValueError("max_chars phải >= min_chars.")
     if max_pauses < 1:
         raise ValueError("max_pauses phải >= 1.")
+    if balance_extra_chunks < 0:
+        raise ValueError("balance_extra_chunks phải >= 0.")
 
-    s = s or ""
-    s = (
-        s.replace("\n", ". ")
-        .replace(":", ",")
-        .replace(". .", ".").replace(". .", ".").replace("..", ".")
-        .replace(",.", ", ")
-        .replace(", .", ".")
-        .replace("“", "")
-        .replace("”", "")
-    )
-    s = re.sub(r"\s+", " ", s).strip()
+    all_split_punct = SENTENCE_END_PUNCT + SOFT_SPLIT_PUNCT
+
+    def normalize_text(text: str) -> str:
+        text = text or ""
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        text = text.replace("“", "").replace("”", "")
+        text = text.replace(":", ",")
+
+        lines = [line.strip() for line in text.split("\n")]
+        parts = []
+
+        for line in lines:
+            if not line:
+                continue
+
+            if parts:
+                prev = parts[-1].rstrip()
+
+                if prev and prev[-1] not in SENTENCE_END_PUNCT + SOFT_SPLIT_PUNCT:
+                    parts[-1] = prev + "."
+
+            parts.append(line)
+
+        text = " ".join(parts)
+
+        text = re.sub(r"\s+([,.;:!?…])", r"\1", text)
+        text = re.sub(r"([,;:!?])\s*\.", r"\1", text)
+        text = re.sub(r"\.\s*\.", ".", text)
+        text = re.sub(r",\s*,", ",", text)
+        text = re.sub(r"\s+", " ", text).strip()
+
+        text = text.lstrip(" \t\n\r.,;:!?…")
+
+        return text
+
+    s = normalize_text(s)
 
     if not s:
         return []
@@ -1112,31 +1152,68 @@ def split_text_into_chunks(
             and text[idx + 1].isdigit()
         )
 
-    def count_pauses(text: str) -> int:
-        return sum(
-            1
-            for i, ch in enumerate(text)
-            if ch in ".,"
-            and not is_number_separator(text, i)
-        )
+    def core_end_idx(text: str) -> int:
+        i = len(text.rstrip()) - 1
+
+        while i >= 0 and text[i] in CLOSING_CHARS:
+            i -= 1
+
+        return i
+
+    def ends_with_punct(text: str) -> bool:
+        i = core_end_idx(text)
+
+        return i >= 0 and text[i] in all_split_punct
+
+    def replace_last_punct(text: str, new_punct: str) -> str:
+        i = core_end_idx(text)
+
+        if i >= 0 and text[i] in all_split_punct:
+            return text[:i] + new_punct + text[i + 1:]
+
+        return text.rstrip() + new_punct
 
     def strip_end_punct(text: str) -> str:
-        return text.strip().rstrip(".,").strip()
+        text = text.strip()
+
+        while text:
+            i = core_end_idx(text)
+
+            if i >= 0 and text[i] in all_split_punct:
+                text = (text[:i] + text[i + 1:]).strip()
+            else:
+                break
+
+        return text.strip()
+
+    def clean_chunk_text(text: str) -> str:
+        text = (text or "").strip()
+
+        text = text.lstrip(" \t\n\r.,;:!?…")
+        text = re.sub(r"\s+([,.;:!?…])", r"\1", text)
+        text = re.sub(r"([,;:!?])\s*\.", r"\1", text)
+        text = re.sub(r"\.\s*\.", ".", text)
+        text = re.sub(r",\s*,", ",", text)
+        text = re.sub(r"\s+", " ", text).strip()
+
+        return text
 
     def finalize(text: str, is_last: bool) -> str:
-        text = text.strip()
+        text = clean_chunk_text(text)
+
         if not text:
             return ""
 
         if force_period:
             return strip_end_punct(text) + "."
 
-        if text.endswith("."):
-            return text
-
-        if text.endswith(","):
+        if ends_with_punct(text):
             if is_last:
-                return strip_end_punct(text) + "."
+                i = core_end_idx(text)
+
+                if i >= 0 and text[i] in SOFT_SPLIT_PUNCT:
+                    return replace_last_punct(text, ".")
+
             return text
 
         return text + ("." if is_last else ",")
@@ -1144,170 +1221,302 @@ def split_text_into_chunks(
     def final_len(text: str, is_last: bool) -> int:
         return len(finalize(text, is_last))
 
-    def fits_pause(text: str, is_last: bool) -> bool:
-        return count_pauses(finalize(text, is_last)) <= max_pauses
+    def count_pauses(text: str) -> int:
+        return sum(
+            1
+            for i, ch in enumerate(text)
+            if ch in all_split_punct and not is_number_separator(text, i)
+        )
 
-    def tail_is_ok(tail: str) -> bool:
-        tail = tail.strip()
-        if not tail:
-            return True
+    def split_into_sentences(text: str) -> List[str]:
+        sentences = []
+        start = 0
+        i = 0
 
-        return final_len(tail, is_last=True) >= min_chars
+        while i < len(text):
+            ch = text[i]
 
-    def add_candidate(
-        candidates: List[Dict[str, Any]],
-        rest: str,
-        end: int,
-        kind: str,
-    ) -> None:
-        raw = rest[:end].strip()
-        tail = rest[end:].strip()
+            if ch in SENTENCE_END_PUNCT and not is_number_separator(text, i):
+                j = i + 1
 
-        if not raw:
-            return
+                while j < len(text) and text[j] in CLOSING_CHARS:
+                    j += 1
 
-        n = final_len(raw, is_last=False)
+                if j == len(text) or text[j].isspace():
+                    sentence = clean_chunk_text(text[start:j])
 
-        if min_chars <= n <= max_chars:
-            candidates.append(
-                {
-                    "end": end,
-                    "kind": kind,
-                    "raw": raw,
-                    "tail": tail,
-                    "tail_ok": tail_is_ok(tail),
-                    "pause_ok": fits_pause(raw, is_last=False),
-                }
-            )
+                    if sentence:
+                        sentences.append(sentence)
 
-    def collect_candidates(rest: str) -> List[Dict[str, Any]]:
-        candidates: List[Dict[str, Any]] = []
+                    start = j
 
-        for i, ch in enumerate(rest):
-            if ch in ".," and not is_number_separator(rest, i):
-                kind = "period" if ch == "." else "comma"
-                add_candidate(candidates, rest, i + 1, kind)
+                    while start < len(text) and text[start].isspace():
+                        start += 1
 
-        # Fallback cuối: cắt theo khoảng trắng.
-        for i, ch in enumerate(rest):
-            if ch.isspace():
-                add_candidate(candidates, rest, i, "space")
-
-        return candidates
-
-    def choose_candidate(candidates: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-        if not candidates:
-            return None
-
-        kind_rank = {
-            "period": 0,
-            "comma": 1,
-            "space": 2,
-        }
-
-        # Ưu tiên:
-        # 1. Không làm phần còn lại bị < min_chars.
-        # 2. Ít dấu ngắt nhịp hơn max_pauses nếu có thể.
-        # 3. Kết thúc bằng '.', rồi ',', rồi khoảng trắng.
-        # 4. Trong cùng loại, lấy điểm cắt xa nhất để giảm số chunk.
-        for need_tail_ok in (True, False):
-            pool = [c for c in candidates if c["tail_ok"]] if need_tail_ok else candidates
-            if not pool:
-                continue
-
-            for need_pause_ok in (True, False):
-                pool2 = [c for c in pool if c["pause_ok"]] if need_pause_ok else pool
-                if not pool2:
+                    i = start
                     continue
 
-                pool2.sort(key=lambda c: (kind_rank[c["kind"]], -c["end"]))
-                return pool2[0]
+            i += 1
+
+        tail = clean_chunk_text(text[start:])
+
+        if tail:
+            sentences.append(tail)
+
+        return sentences
+
+    def find_punct_cut(text: str, limit: int) -> Optional[int]:
+        limit = min(limit, len(text))
+
+        for i in range(limit - 1, -1, -1):
+            ch = text[i]
+
+            if ch in all_split_punct and not is_number_separator(text, i):
+                end = i + 1
+
+                while end < len(text) and end < limit and text[end] in CLOSING_CHARS:
+                    end += 1
+
+                return end
 
         return None
 
-    def fallback_cut(rest: str) -> int:
-        """
-        Khi không tìm được '.', ',' hoặc khoảng trắng nào tạo được chunk trong [min, max],
-        vẫn ưu tiên không vượt max_chars.
+    def find_space_cut(text: str, limit: int) -> Optional[int]:
+        limit = min(limit, len(text))
 
-        Nếu không có khoảng trắng phù hợp, bắt buộc cắt cứng.
-        """
-        max_raw_len = max_chars - 1
+        for i in range(limit, 0, -1):
+            if i < len(text) and text[i].isspace():
+                raw = text[:i].strip()
 
-        limit = min(len(rest), max_raw_len)
-
-        for i in range(limit, -1, -1):
-            if i < len(rest) and rest[i].isspace():
-                raw = rest[:i].strip()
                 if raw:
                     return i
 
-        return max(1, max_raw_len)
-
-    chunks: List[str] = []
-    rest = s
-
-    while rest:
-        rest = rest.strip()
-        if not rest:
-            break
-
-        rest_final = finalize(rest, is_last=True)
-
-        # Nếu phần còn lại đã không vượt max_chars thì giữ nguyên,
-        # kể cả khi nó < min_chars. Đây là trường hợp bất khả kháng ở chunk cuối.
-        if len(rest_final) <= max_chars:
-            chunks.append(rest_final)
-            break
-
-        candidates = collect_candidates(rest)
-        chosen = choose_candidate(candidates)
-
-        if chosen is not None:
-            raw = chosen["raw"]
-            end = chosen["end"]
-        else:
-            end = fallback_cut(rest)
-            raw = rest[:end].strip()
-
-        chunk = finalize(raw, is_last=False)
-        chunks.append(chunk)
-
-        rest = rest[end:].strip()
-
-    def try_merge(a: str, b: str) -> Optional[str]:
-        b_is_last = b.strip().endswith(".")
-
-        merged_body = (strip_end_punct(a) + " " + b.strip()).strip()
-        merged = finalize(merged_body, is_last=b_is_last)
-
-        if len(merged) <= max_chars and count_pauses(merged) <= max_pauses:
-            return merged
-
         return None
 
-    # Gộp các chunk < min_chars nếu có thể mà không vượt max_chars.
-    i = 0
-    while i < len(chunks) and len(chunks) > 1:
-        if len(chunks[i]) >= min_chars:
-            i += 1
-            continue
+    def split_long_sentence(sentence: str) -> List[str]:
+        parts = []
+        rest = clean_chunk_text(sentence)
 
-        if i + 1 < len(chunks):
-            merged = try_merge(chunks[i], chunks[i + 1])
-            if merged is not None:
-                chunks[i] = merged
-                del chunks[i + 1]
-                continue
+        while rest and final_len(rest, is_last=True) > max_chars:
+            cut = find_punct_cut(rest, max_chars)
 
-        if i - 1 >= 0:
-            merged = try_merge(chunks[i - 1], chunks[i])
-            if merged is not None:
-                chunks[i - 1] = merged
-                del chunks[i]
-                i = max(i - 1, 0)
-                continue
+            if cut is None:
+                cut = find_space_cut(rest, max(1, max_chars - 1))
 
-        i += 1
+            if cut is None:
+                cut = max(1, max_chars - 1)
 
-    return [c for c in chunks if c.strip()]
+            raw = clean_chunk_text(rest[:cut])
+
+            if not raw:
+                raw = clean_chunk_text(rest[:max(1, max_chars - 1)])
+                cut = len(raw)
+
+            parts.append(raw)
+            rest = clean_chunk_text(rest[cut:])
+
+        if rest:
+            parts.append(rest)
+
+        return parts
+
+    def make_segment(pieces: List[str], i: int, j: int) -> str:
+        return clean_chunk_text(" ".join(pieces[i:j]))
+
+    def choose_balanced_chunks(pieces: List[str]) -> List[str]:
+        """
+        Gom các câu/piece thành chunk bằng quy hoạch động.
+
+        Mục tiêu:
+            1. Không chunk nào vượt max_chars.
+            2. Độ dài các chunk càng đều càng tốt.
+            3. Nếu độ đều tương đương, ưu tiên ít vượt max_pauses hơn.
+            4. Nếu vẫn tương đương, ưu tiên ít vi phạm min_chars hơn.
+        """
+        n = len(pieces)
+
+        if n == 0:
+            return []
+
+        if n == 1:
+            return [pieces[0]]
+
+        segment_cache = {}
+
+        for i in range(n):
+            text = ""
+
+            for j in range(i + 1, n + 1):
+                if text:
+                    text = clean_chunk_text(text + " " + pieces[j - 1])
+                else:
+                    text = clean_chunk_text(pieces[j - 1])
+
+                non_last_text = finalize(text, is_last=False)
+                last_text = finalize(text, is_last=True)
+
+                non_last_len = len(non_last_text)
+                last_len = len(last_text)
+
+                if j < n and non_last_len <= max_chars:
+                    segment_cache[(i, j, False)] = {
+                        "text": text,
+                        "final": non_last_text,
+                        "length": non_last_len,
+                        "pause_over": max(0, count_pauses(non_last_text) - max_pauses),
+                        "under": max(0, min_chars - non_last_len),
+                    }
+
+                if j == n and last_len <= max_chars:
+                    segment_cache[(i, j, True)] = {
+                        "text": text,
+                        "final": last_text,
+                        "length": last_len,
+                        "pause_over": max(0, count_pauses(last_text) - max_pauses),
+                        "under": max(0, min_chars - last_len),
+                    }
+
+                if non_last_len > max_chars and last_len > max_chars:
+                    break
+
+        whole_text = make_segment(pieces, 0, n)
+        total_len = final_len(whole_text, is_last=True)
+
+        k_min = max(1, math.ceil(total_len / max_chars))
+        k_max = min(n, k_min + balance_extra_chunks)
+
+        def solve_for_k(k: int):
+            target = total_len / k
+
+            dp = [[None for _ in range(n + 1)] for _ in range(k + 1)]
+            prev = [[None for _ in range(n + 1)] for _ in range(k + 1)]
+
+            dp[0][0] = (0.0, 0, 0)
+
+            for kk in range(1, k + 1):
+                min_j = kk
+                max_j = n - (k - kk)
+
+                for j in range(min_j, max_j + 1):
+                    best_score = None
+                    best_i = None
+
+                    for i in range(kk - 1, j):
+                        if dp[kk - 1][i] is None:
+                            continue
+
+                        is_last_segment = j == n
+                        info = segment_cache.get((i, j, is_last_segment))
+
+                        if info is None:
+                            continue
+
+                        length = info["length"]
+                        pause_over = info["pause_over"]
+                        under = info["under"]
+
+                        balance_error = (length - target) ** 2
+
+                        prev_score = dp[kk - 1][i]
+
+                        score = (
+                            prev_score[0] + balance_error,
+                            prev_score[1] + pause_over,
+                            prev_score[2] + under,
+                        )
+
+                        if best_score is None or score < best_score:
+                            best_score = score
+                            best_i = i
+
+                    if best_score is not None:
+                        dp[kk][j] = best_score
+                        prev[kk][j] = best_i
+
+            if dp[k][n] is None:
+                return None
+
+            ranges = []
+            kk = k
+            j = n
+
+            while kk > 0:
+                i = prev[kk][j]
+                is_last_segment = j == n
+                info = segment_cache[(i, j, is_last_segment)]
+
+                ranges.append((i, j, info))
+
+                j = i
+                kk -= 1
+
+            ranges.reverse()
+
+            chunks = [item[2]["text"] for item in ranges]
+            lengths = [item[2]["length"] for item in ranges]
+
+            pause_over_sum = sum(item[2]["pause_over"] for item in ranges)
+            under_sum = sum(item[2]["under"] for item in ranges)
+
+            length_range = max(lengths) - min(lengths)
+            balance_sse = sum((length - target) ** 2 for length in lengths)
+
+            global_score = (
+                length_range,
+                balance_sse,
+                pause_over_sum,
+                under_sum,
+                k,
+            )
+
+            return {
+                "chunks": chunks,
+                "score": global_score,
+            }
+
+        results = []
+
+        for k in range(k_min, k_max + 1):
+            result = solve_for_k(k)
+
+            if result is not None:
+                results.append(result)
+
+        # Nếu chưa tìm được cách chia hợp lệ trong khoảng cho phép,
+        # tiếp tục tăng số chunk cho tới khi tìm được.
+        if not results:
+            for k in range(k_max + 1, n + 1):
+                result = solve_for_k(k)
+
+                if result is not None:
+                    results.append(result)
+                    break
+
+        if not results:
+            return pieces
+
+        results.sort(key=lambda item: item["score"])
+
+        return results[0]["chunks"]
+
+    sentences = split_into_sentences(s)
+
+    pieces = []
+
+    for sentence in sentences:
+        if final_len(sentence, is_last=True) <= max_chars:
+            pieces.append(sentence)
+        else:
+            pieces.extend(split_long_sentence(sentence))
+
+    raw_chunks = choose_balanced_chunks(pieces)
+
+    chunks = []
+
+    for idx, chunk in enumerate(raw_chunks):
+        final_chunk = finalize(chunk, is_last=(idx == len(raw_chunks) - 1))
+
+        if final_chunk:
+            chunks.append(final_chunk)
+
+    return chunks

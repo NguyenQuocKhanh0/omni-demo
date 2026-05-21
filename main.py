@@ -516,7 +516,7 @@ if __name__ == "__main__":
 
     demo.launch(
         server_name="0.0.0.0",
-        server_port=2396,
+        server_port=2397,
         share=True,
         max_threads=4,  # tùy, không còn ảnh hưởng tới thread inference chính
     )
