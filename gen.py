@@ -52,7 +52,7 @@ for idx in selected_ids:
 
     try:
         text_to_speech(
-            text=text,
+            texts=text,
             prompt_wav_path=prompt_wav_path,
             prompt_text=prompt_text,
             inference_timesteps=inference_timesteps,
