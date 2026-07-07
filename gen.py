@@ -13,7 +13,7 @@ prompt_wav_path = "tin_nhanh.wav"
 prompt_text = "đến tiệm mua chai thuốc trừ sâu người đàn ông hỏi một câu khiến nhân viên giật mình lấy lại chai thuốc."
 inference_timesteps = 64
 
-NUM_SAMPLES = 1000
+NUM_SAMPLES = 6500
 
 # ==========================
 # Tạo thư mục output
