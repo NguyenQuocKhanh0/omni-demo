@@ -23,7 +23,7 @@ NUM_SAMPLES = 4300
 CHARS_PER_SECOND = 15.0
 
 # Bucket từ 0-1s, 1-2s, ..., 19-20s, >20s
-MAX_BUCKET_SEC = 17
+MAX_BUCKET_SEC = 15
 
 # Chế độ lấy mẫu:
 # "balanced"               : cố gắng lấy đều giữa các khoảng
