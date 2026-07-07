@@ -15,7 +15,7 @@ prompt_wav_path = "tin_nhanh.wav"
 prompt_text = "đến tiệm mua chai thuốc trừ sâu, người đàn ông hỏi một câu khiến nhân viên giật mình lấy lại chai thuốc."
 inference_timesteps = 64
 
-NUM_SAMPLES = 4000
+NUM_SAMPLES = 4100
 
 # Ước lượng tốc độ đọc.
 # Nếu thấy text bị xếp sai bucket, chỉnh số này.
@@ -23,7 +23,7 @@ NUM_SAMPLES = 4000
 CHARS_PER_SECOND = 15.0
 
 # Bucket từ 0-1s, 1-2s, ..., 19-20s, >20s
-MAX_BUCKET_SEC = 27
+MAX_BUCKET_SEC = 25
 
 # Chế độ lấy mẫu:
 # "balanced"               : cố gắng lấy đều giữa các khoảng
