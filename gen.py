@@ -30,8 +30,7 @@ MAX_BUCKET_SEC = 15
 # "balanced_long_less"     : gần đều, nhưng data rất dài sẽ thấp hơn chút
 TARGET_MODE = "balanced_long_less"
 
-RANDOM_SEED = 42
-random.seed(RANDOM_SEED)
+random.seed()
 
 
 # ==========================
