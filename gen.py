@@ -21,6 +21,12 @@ parser.add_argument(
     default="",
     help="Prefix thêm vào tên file WAV và TXT",
 )
+parser.add_argument(
+    "--num-samples",
+    type=int,
+    default=6000,
+    help="Số lượng mẫu cần generate, mặc định là 6000",
+)
 
 args = parser.parse_args()
 FILE_PREFIX = args.prefix.strip()
@@ -35,7 +41,7 @@ prompt_wav_path = "audio.wav"
 prompt_text = Path("text.txt").read_text(encoding="utf-8").strip()
 inference_timesteps = 64
 
-NUM_SAMPLES = 6000
+NUM_SAMPLES = args.num_samples
 
 # Ước lượng tốc độ đọc.
 # Nếu thấy text bị xếp sai bucket, chỉnh số này.
