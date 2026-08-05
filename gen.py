@@ -2,6 +2,7 @@ import os
 import random
 import math
 from collections import defaultdict, Counter
+from pathlib import Path
 
 from model import text_to_speech
 
@@ -11,11 +12,11 @@ from model import text_to_speech
 INPUT_FILE = "merged_shuffled_unique_text.txt"
 OUTPUT_DIR = "audio"
 
-prompt_wav_path = "tin_nhanh.wav"
-prompt_text = "đến tiệm mua chai thuốc trừ sâu, người đàn ông hỏi một câu khiến nhân viên giật mình lấy lại chai thuốc."
+prompt_wav_path = "audio.wav"
+prompt_text = Path("text.txt").read_text(encoding="utf-8").strip()
 inference_timesteps = 64
 
-NUM_SAMPLES = 1300
+NUM_SAMPLES = 6000
 
 # Ước lượng tốc độ đọc.
 # Nếu thấy text bị xếp sai bucket, chỉnh số này.
