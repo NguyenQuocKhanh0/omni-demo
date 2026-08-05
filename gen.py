@@ -1,11 +1,30 @@
 import os
 import random
 import math
+import argparse
 from collections import defaultdict, Counter
 from pathlib import Path
 
 from model import text_to_speech
 
+
+# ==========================
+# Command-line arguments
+# ==========================
+parser = argparse.ArgumentParser(
+    description="Generate audio từ file văn bản"
+)
+
+parser.add_argument(
+    "--prefix",
+    type=str,
+    default="",
+    help="Prefix thêm vào tên file WAV và TXT",
+)
+
+args = parser.parse_args()
+FILE_PREFIX = args.prefix.strip()
+filename_prefix = f"{FILE_PREFIX}_" if FILE_PREFIX else ""
 # ==========================
 # Config
 # ==========================
@@ -261,8 +280,8 @@ print_distribution("Phân bố data đã chọn theo duration ước lượng", 
 for idx in selected_ids:
     text = lines[idx]
 
-    txt_path = os.path.join(OUTPUT_DIR, f"{idx}.txt")
-    wav_path = os.path.join(OUTPUT_DIR, f"{idx}.wav")
+    txt_path = os.path.join(OUTPUT_DIR, f"{filename_prefix}{idx}.txt")
+    wav_path = os.path.join(OUTPUT_DIR, f"{filename_prefix}{idx}.wav")
 
     # Lưu text
     with open(txt_path, "w", encoding="utf-8") as f:
