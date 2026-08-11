@@ -30,7 +30,7 @@ from omnivoice import OmniVoice
 # =========================
 
 
-CHECKPOINT_DIR = "kjanh/KhanhTTS-OmniVoice"
+CHECKPOINT_DIR = "meandyou200175/omv-Trung"
 
 DEFAULT_REF_AUDIO = "example/refvoice.wav"
 DEFAULT_REF_TEXT = (
