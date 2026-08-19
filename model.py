@@ -136,7 +136,7 @@ def trim_leading_silence_torch(
 def trim_edge_silence_np(
     audio_np: np.ndarray,
     sample_rate: int,
-    silence_thresh: float = 0.086,
+    silence_thresh: float = 0.046,
     chunk_ms: int = 10,
     extend_ms: int = 20,
     ratio: float = 0.95,
